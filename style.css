@@ -1,0 +1,3 @@
+div.dokuwiki div.editbutton_plugin_cooklang form button::before {
+	content: '🥘 ';
+}

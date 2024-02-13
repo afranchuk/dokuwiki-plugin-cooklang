@@ -1,0 +1,7 @@
+base   cooklang
+author Alex Franchuk
+email  alex.franchuk@gmail.com
+date   2024-02-08
+name   cooklang plugin
+desc   A plugin to render cooklang recipes.
+url    https://www.dokuwiki.org/plugin:cooklang
