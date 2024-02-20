@@ -2,6 +2,61 @@
 
 use dokuwiki\Extension\SyntaxPlugin;
 
+class NumberRenderer {
+    public function __construct($scale) {
+        if ($scale) {
+            $d = self::gcd($scale[0], $scale[1]);
+            $this->scale = array($scale[0] / $d, $scale[1] / $d);
+        }
+    }
+
+    public function render($number)
+    {
+        $num = 0;
+        $den = 1;
+        switch ($number['type']) {
+        case 'regular':
+            $num = $number['value'];
+            break;
+        case 'fraction':
+            $num = $number['value']['whole'] * $den + $number['value']['num'];
+            $den = $number['value']['den'];
+            break;
+        default:
+            return "(unknown number)";
+        }
+
+        if ($this->scale) {
+            $num *= $this->scale[0];
+            $den *= $this->scale[1];
+        }
+
+        $whole = intdiv($num, $den);
+        $num -= $whole * $den;
+
+        $d = self::gcd($num, $den);
+        $num /= $d;
+        $den /= $d;
+
+        $s = "";
+        if ($whole) {
+            $s .= $whole;
+        }
+        if ($num) {
+            if ($s) $s .= " ";
+            $s .= $num . "/" . $den;
+        }
+
+        return $s;
+    }
+
+    private static function gcd($a, $b) {
+        return ($a % $b) ? self::gcd($b, $a % $b) : $b;
+    }
+
+    private $scale;
+}
+
 /**
  * DokuWiki Plugin cooklang (Syntax Component)
  *
@@ -57,13 +112,28 @@ class syntax_plugin_cooklang extends SyntaxPlugin
             $attrs[$name] = $value;
         }
 
-        $process = proc_open(array('/usr/local/bin/cook', 'recipe', 'read', '--format', 'json'), array(
+        $compiler = escapeshellarg($this->getConf('compiler'));
+        $args = array_map('escapeshellarg', $this->getConf('compiler_flags'));
+
+        if ($this->getConf('scaling') === 'compiler') {
+            $scale_arg = escapeshellarg($this->getConf('compiler_scaling_flag'));
+            if ($scale_arg && $attrs['servings']) {
+                array_push($args, $scale_arg, $attrs['servings']);
+            }
+        }
+
+        $cmd = escapeshellcmd($compiler . ' ' . implode(' ', $args));
+        $process = proc_open($cmd, array(
             0 => array("pipe", "r"),
             1 => array("pipe", "w"),
             2 => array("pipe", "w"),
         ), $pipes);
 
         if (is_resource($process)) {
+            $prefix = $this->getConf('recipe_prefix');
+            if ($prefix) {
+                fwrite($pipes[0], $prefix . "\n");
+            }
             fwrite($pipes[0], $content);
             fclose($pipes[0]);
 
@@ -85,19 +155,6 @@ class syntax_plugin_cooklang extends SyntaxPlugin
         return array("'cook' program missing");
     }
 
-    private function number_to_string($multiplier, $number)
-    {
-        switch ($number['type']) {
-        case 'regular':
-            return (string)($number['value'] * $multiplier);
-        case 'fraction':
-            $whole = $number['value']['whole'] ? (string)($number['value']['whole'] * $multiplier) . " " : "";
-            return $whole . (string)($number['value']['num'] * $multiplier) . "/" . (string)$number['value']['den'];
-        default:
-            return "(unknown number)";
-        }
-    }
-
     /** @inheritDoc */
     public function render($mode, Doku_Renderer $renderer, $data)
     {
@@ -111,13 +168,15 @@ class syntax_plugin_cooklang extends SyntaxPlugin
 
             $servings = $json['metadata']['servings'];
             $display_servings = $attrs['servings'];
-            $multiplier = $display_servings && $servings[0] ? (float)$display_servings / (float)$servings[0] : 1;
+            $do_scale = $this->getConf('scaling') === 'manual';
+            $scale = $do_scale && $display_servings && $servings[0] ? array($display_servings, $servings[0]) : false;
+            $num_renderer = new NumberRenderer($scale);
 
             // Start edit section
             $class = $renderer->startSectionEdit($dsp[0], ['target' => 'plugin_cooklang', 'name' => 'recipe']);
             $renderer->doc .= '<div class="' . $class . '">';
 
-            $renderer->doc .= sprintf("<p><b>servings: %d</b></p>", $servings[0] * $multiplier);
+            $renderer->doc .= sprintf("<p><b>servings: %d</b></p>", $display_servings ?? $servings[0]);
 
             $sections = $json['sections'];
             $ingredients = $json['ingredients'];
@@ -131,7 +190,7 @@ class syntax_plugin_cooklang extends SyntaxPlugin
                 $quantity = $ingredient['quantity'];
                 $renderer->doc .= "<li>";
                 if ($quantity) {
-                    $renderer->doc .= $this->number_to_string($multiplier, $quantity['value']['value']) . " ";
+                    $renderer->doc .= $num_renderer->render($quantity['value']['value']) . " ";
                     if ($quantity['unit']) {
                         $renderer->doc .= $renderer->_xmlEntities($quantity['unit']) . " ";
                     }
