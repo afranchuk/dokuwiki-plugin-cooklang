@@ -173,17 +173,17 @@ class syntax_plugin_cooklang extends SyntaxPlugin
             $num_renderer = new NumberRenderer($scale);
 
             // Start edit section
-            $class = $renderer->startSectionEdit($dsp[0], ['target' => 'plugin_cooklang', 'name' => 'recipe']);
+            $class = $renderer->startSectionEdit($dsp[0], ['target' => 'plugin_cooklang', 'name' => $this->getLang('recipe_section')]);
             $renderer->doc .= '<div class="' . $class . '">';
 
-            $renderer->doc .= sprintf("<p><b>servings: %d</b></p>", $display_servings ?? $servings[0]);
+            $renderer->doc .= sprintf("<p><b>%s: %d</b></p>", $renderer->_xmlEntities($this->getLang('servings')), $display_servings ?? $servings[0]);
 
             $sections = $json['sections'];
             $ingredients = $json['ingredients'];
             $cookware = $json['cookware'];
             $timers = $json['timers'];
 
-            $renderer->doc .= "<h3>Ingredients</h3>";
+            $renderer->doc .= "<h3>" . $renderer->_xmlEntities($this->getLang('ingredients_header')) . "</h3>";
 
             $renderer->doc .= "<ul>";
             foreach ($ingredients as &$ingredient) {
@@ -206,7 +206,7 @@ class syntax_plugin_cooklang extends SyntaxPlugin
                     $renderer->doc .= "<hr>";
                 }
 
-                $renderer->doc .= "<h3>Instructions</h3>";
+                $renderer->doc .= "<h3>" . $renderer->_xmlEntities($this->getLang('instructions_header')) . "</h3>";
 
                 $steps = $section['steps'];
                 $renderer->doc .= "<ol>";
@@ -241,8 +241,6 @@ class syntax_plugin_cooklang extends SyntaxPlugin
             // End edit section
             $renderer->doc .= "</div>";
             $renderer->finishSectionEdit($dsp[1]);
-
-            // $renderer->doc .= "<pre>" . var_export($json, true) . "</pre>";
 
             return true;
         }
