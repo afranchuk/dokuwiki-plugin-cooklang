@@ -10,8 +10,21 @@ class NumberRenderer {
         }
     }
 
-    public function render($number)
+    public function render($number, $do_scale = true)
     {
+        switch ($number['type']) {
+        case 'number':
+            return $this->render_number($number['value'], $do_scale);
+        case 'range':
+            $start = $this->render_number($number['value']['start'], $do_scale);
+            $end = $this->render_number($number['value']['end'], $do_scale);
+            return $start . "-" . $end;
+        default:
+            return "(unknown number type)";
+        }
+    }
+
+    private function render_number($number, $do_scale) {
         $num = 0;
         $den = 1;
         switch ($number['type']) {
@@ -26,7 +39,7 @@ class NumberRenderer {
             return "(unknown number)";
         }
 
-        if ($this->scale) {
+        if ($this->scale && $do_scale) {
             $num *= $this->scale[0];
             $den *= $this->scale[1];
         }
@@ -166,22 +179,26 @@ class syntax_plugin_cooklang extends SyntaxPlugin
                 return true;
             }
 
-            $servings = $json['metadata']['servings'];
+            # Use `map` to be compatible with both `cook` and `chef`, though only supporting one number.
+            $servings = (int)$json['metadata']['map']['servings'];
             $display_servings = $attrs['servings'];
             $do_scale = $this->getConf('scaling') === 'manual';
-            $scale = $do_scale && $display_servings && $servings[0] ? array($display_servings, $servings[0]) : false;
+            $scale = $do_scale && $display_servings && $servings ? array((int)$display_servings, $servings) : false;
+
             $num_renderer = new NumberRenderer($scale);
 
             // Start edit section
             $class = $renderer->startSectionEdit($dsp[0], ['target' => 'plugin_cooklang', 'name' => $this->getLang('recipe_section')]);
             $renderer->doc .= '<div class="' . $class . '">';
 
-            $renderer->doc .= sprintf("<p><b>%s: %d</b></p>", $renderer->_xmlEntities($this->getLang('servings')), $display_servings ?? $servings[0]);
+            $renderer->doc .= sprintf("<p><b>%s: %d</b></p>", $renderer->_xmlEntities($this->getLang('servings')), $display_servings ?? $servings);
 
             $sections = $json['sections'];
             $ingredients = $json['ingredients'];
             $cookware = $json['cookware'];
             $timers = $json['timers'];
+            # For `chef`
+            $inline_quantities = $json['inline_quantities'];
 
             $renderer->doc .= "<h3>" . $renderer->_xmlEntities($this->getLang('ingredients_header')) . "</h3>";
 
@@ -190,7 +207,7 @@ class syntax_plugin_cooklang extends SyntaxPlugin
                 $quantity = $ingredient['quantity'];
                 $renderer->doc .= "<li>";
                 if ($quantity) {
-                    $renderer->doc .= $num_renderer->render($quantity['value']['value']) . " ";
+                    $renderer->doc .= $num_renderer->render($quantity['value']) . " ";
                     if ($quantity['unit']) {
                         $renderer->doc .= $renderer->_xmlEntities($quantity['unit']) . " ";
                     }
@@ -209,6 +226,10 @@ class syntax_plugin_cooklang extends SyntaxPlugin
                 $renderer->doc .= "<h3>" . $renderer->_xmlEntities($this->getLang('instructions_header')) . "</h3>";
 
                 $steps = $section['steps'];
+                # For `chef`
+                if (!$steps) {
+                    $steps = array_filter(array_map(function($v) { return $v['value']; }, $section['content']));
+                }
                 $renderer->doc .= "<ol>";
                 foreach ($steps as &$step) {
                     $renderer->doc .= "<li>";
@@ -222,11 +243,25 @@ class syntax_plugin_cooklang extends SyntaxPlugin
                             $renderer->doc .= $renderer->_xmlEntities($ingredients[$item['index']]['name']);
                             break;
                         case 'cookware':
-                            $renderer->doc .= $renderer->_xmlEntities($cookware[$item['index']]['name']);
+                            $ware = $cookware[$item['index']];
+                            if ($ware['quantity']) {
+                                $renderer->doc .= $num_renderer->render($ware['quantity']) . " ";
+                            }
+                            $renderer->doc .= $renderer->_xmlEntities($ware['name']);
                             break;
                         case 'timer':
                             $timer = $timers[$item['index']]['quantity'];
-                            $renderer->doc .= $this->number_to_string(1, $timer['value']['value']) . " " . $renderer->_xmlEntities($timer['unit']);
+                            $renderer->doc .= $num_renderer->render($timer['value'], false) . " " . $renderer->_xmlEntities($timer['unit']);
+                            break;
+                        # For `chef`
+                        case 'inlineQuantity':
+                            $quantity = $inline_quantities[$item['index']];
+                            if ($quantity) {
+                                $renderer->doc .= $num_renderer->render($quantity['value'], false) . " ";
+                                if ($quantity['unit']) {
+                                    $renderer->doc .= $renderer->_xmlEntities($quantity['unit']) . " ";
+                                }
+                            }
                             break;
                         }
                     }
