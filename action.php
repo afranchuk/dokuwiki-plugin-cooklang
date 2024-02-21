@@ -37,7 +37,7 @@ class action_plugin_cooklang extends ActionPlugin {
             $servings = $matches[1] ?? '1';
         }
  
-        $event->data['form']->addElement(new InputElement('number', 'servings', 'Displayed Servings'))->attr('min', '1')->val($servings);
+        $event->data['form']->addElement(new InputElement('number', 'servings', $this->getLang('servings_label')))->attr('min', '1')->val($servings);
         $event->data['form']->addTag('br');
         $event->data['form']->addTextarea('recipe', '')->val($content)->attr('cols', '80')->attr('rows', '10');
     }
