@@ -135,7 +135,7 @@ class syntax_plugin_cooklang extends SyntaxPlugin
             }
         }
 
-        $cmd = escapeshellcmd($compiler . ' ' . implode(' ', $args) . '; echo $? >&3 ');
+        $cmd = escapeshellcmd($compiler . ' ' . implode(' ', $args)) . '; echo $? >&3 ';
         
         $process = proc_open($cmd, array(
             0 => array("pipe", "r"),
