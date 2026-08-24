@@ -135,11 +135,13 @@ class syntax_plugin_cooklang extends SyntaxPlugin
             }
         }
 
-        $cmd = escapeshellcmd($compiler . ' ' . implode(' ', $args));
+        $cmd = escapeshellcmd($compiler . ' ' . implode(' ', $args)) . '; echo $? >&3 ';
+        
         $process = proc_open($cmd, array(
             0 => array("pipe", "r"),
             1 => array("pipe", "w"),
             2 => array("pipe", "w"),
+            3 => array("pipe", "w") 
         ), $pipes);
 
         if (is_resource($process)) {
@@ -155,7 +157,12 @@ class syntax_plugin_cooklang extends SyntaxPlugin
             $err = stream_get_contents($pipes[2]);
             fclose($pipes[2]);
 
-            $result = proc_close($process);
+            $exitCodeRaw = stream_get_contents($pipes[3]);
+            $result = (int)trim($exitCodeRaw);
+            fclose($pipes[3]);
+
+            proc_close($process);
+            
             if ($result == 0) {
                 $json = json_decode($output, true);
 
